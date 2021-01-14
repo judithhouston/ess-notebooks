@@ -10,7 +10,7 @@
     "- Have conda installed\n",
     "- `conda env create -f ess-notebooks-latest.yml python=3.7` . The yaml environment file is part of this repository.\n",
     "- fetch the data `git clone git@github.com:scipp/ess-notebooks-data.git` somewhere local \n",
-    "- Generate the `scippconfig.py` file using `make_config.py` located in same directory as this notebook. Refer to the help `make_config.py --help` \n",
+    "- Generate the `dataconfig.py` file using `make_config.py` located in same directory as this notebook. In general, you simply need to point `make_config.py` to the root directory of data you cloned above. Refer to the help `make_config.py --help` for more information. \n",
     "\n",
     "Converted to use scipp and notebook from [this repository](https://github.com/scipp/ess-legacy).\n",
     "\n",
@@ -44,8 +44,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -62,12 +61,34 @@
     "    raise e\n",
     "\n",
     "try:\n",
-    "    import scippconfig\n",
+    "    import dataconfig\n",
     "except ImportError as e:\n",
     "    print(\n",
-    "        \"scippconfig is not available. Make sure you have generated it with `make_config.py`.\"\n",
+    "        \"dataconfig is not available. Make sure you have generated it with `make_config.py`.\"\n",
     "    )\n",
     "    raise e"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Floating point precision "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import numpy as np\n",
+    "float_type = np.float32\n",
+    "\n",
+    "\n",
+    "# Helper to determine scipp dtype from np dtype\n",
+    "def scipp_dtype(dtype):\n",
+    "    return sc.Variable(value=0, dtype=dtype).dtype"
    ]
   },
   {
@@ -90,8 +111,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -104,17 +124,13 @@
     "\n",
     "import ess.v20.imaging as imaging\n",
     "import ess.v20.imaging.operations as operations\n",
-    "import scippconfig\n",
+    "import dataconfig\n",
     "from scipy import ndimage, signal\n",
     "\n",
-    "DATA_DIR_NAME = \"stress-experiments\"\n",
-    "OUTPUT_DIR_NAME = \"output\"\n",
-    "\n",
-    "data_dir = os.path.join(scippconfig.script_root, DATA_DIR_NAME)\n",
-    "\n",
-    "output_dir = os.path.join(scippconfig.script_root, OUTPUT_DIR_NAME)\n",
-    "instrument_file = os.path.join(data_dir,\n",
-    "                               'V20_Definition_GP2.xml')\n",
+    "local_data_path = os.path.join('ess', 'v20', 'imaging', 'gp2-stress-experiments')\n",
+    "data_dir = os.path.join(dataconfig.data_root, local_data_path)\n",
+    "output_dir = os.path.join(dataconfig.data_root, 'output')\n",
+    "instrument_file = os.path.join(data_dir, 'V20_Definition_GP2.xml')\n",
     "\n",
     "tofs_path = os.path.join(data_dir, 'GP2_Stress_time_values.txt')\n",
     "raw_data_dir = os.path.join(data_dir)\n",
@@ -122,6 +138,23 @@
     "if not os.path.exists(data_dir):\n",
     "    raise FileNotFoundError(\"The following data directory does not exist,\"\n",
     "                            f\" check your make_config.py:\\n{data_dir}\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## Geometry"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "geometry = sc.Dataset()\n",
+    "sc.compat.mantid.load_component_info(geometry, instrument_file)"
    ]
   },
   {
@@ -142,14 +175,15 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
     "# Customisable Options:\n",
     "\n",
     "# defining grouping of 2D detector pixels\n",
+    "nx_source = 324\n",
+    "ny_source = 324\n",
     "grouping_number = 27\n",
     "nx_target = grouping_number\n",
     "ny_target = grouping_number\n",
@@ -205,7 +239,7 @@
     "masking_threshold = 0.80\n",
     "\n",
     "# Toggles outputting masked and sliced tiff stacks\n",
-    "output_tiff_stack = True\n",
+    "output_tiff_stack = False\n",
     "\n",
     "# Experiment Metadata\n",
     "measurement_number = 11"
@@ -230,8 +264,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%% \n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -247,7 +280,7 @@
     "\n",
     "def load_and_scale(folder_name, scale_factor):\n",
     "    to_load = os.path.join(raw_data_dir, folder_name)\n",
-    "    variable = imaging.tiffs_to_variable(to_load)\n",
+    "    variable = imaging.tiffs_to_variable(to_load, dtype=float_type)\n",
     "    variable *= scale_factor\n",
     "    return variable\n",
     "\n",
@@ -278,8 +311,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -294,6 +326,7 @@
    "metadata": {},
    "outputs": [],
    "source": [
+    "# exclude-from-export\n",
     "sc.plot.plot(sc.sum(ds['sample'], dim='spectrum'))"
    ]
   },
@@ -316,8 +349,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -376,6 +408,7 @@
    "metadata": {},
    "outputs": [],
    "source": [
+    "# exclude-from-export\n",
     "sc.plot.plot(sc.sum(stitched['sample'], dim='spectrum'))"
    ]
   },
@@ -399,8 +432,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -436,8 +468,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -467,7 +498,6 @@
     "# Calculate transmission value for all\n",
     "\n",
     "int_norm = integrated / integrated_reference\n",
-    "sc.plot.plot(int_norm)\n",
     "\n",
     "# Store TOF coords back for the export to TIFF stack\n",
     "tof_coords = stitched.coords[\"tof\"]\n",
@@ -476,7 +506,6 @@
     "    print(f\"Masking non-sample regions in {k}\")\n",
     "\n",
     "    p = mask_non_sample_regions(int_norm, stitched, k)\n",
-    "    print(k, sc.sum(p, dim='spectrum'))\n",
     "    stitched[k].masks['non-sample-region'] = mask_non_sample_regions(\n",
     "        int_norm, stitched, k)\n",
     "\n",
@@ -487,8 +516,8 @@
     "                                  key=k,\n",
     "                                  base_name=f\"{k}_norm_sum\",\n",
     "                                  output_dir=tiff_out_dir,\n",
-    "                                  x_len=324,\n",
-    "                                  y_len=324,\n",
+    "                                  x_len=nx_source,\n",
+    "                                  y_len=ny_source,\n",
     "                                  tof_values=tof_coords.values)\n",
     "        # Print a newline to prevent the saving messages overlapping\n",
     "        print()"
@@ -497,9 +526,7 @@
   {
    "cell_type": "code",
    "execution_count": null,
-   "metadata": {
-    "scrolled": true
-   },
+   "metadata": {},
    "outputs": [],
    "source": [
     "stitched"
@@ -522,8 +549,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -531,7 +557,7 @@
     "normalized = stitched / reference\n",
     "\n",
     "# Replace special values nan and inf\n",
-    "replacement = sc.Variable(value=0.0, variance=0.0)\n",
+    "replacement = sc.Variable(value=0.0, variance=0.0, dtype=float_type)\n",
     "kwargs = {\"nan\": replacement, \"posinf\": replacement, \"neginf\": replacement}\n",
     "for k in normalized.keys():\n",
     "    sc.nan_to_num(normalized[k].data, out=normalized[k].data, **kwargs)"
@@ -554,8 +580,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -564,16 +589,16 @@
     "\n",
     "    imaging.export_tiff_stack(dataset=normalized,\n",
     "                              key=\"sample\",\n",
-    "                              x_len=324,\n",
-    "                              y_len=324,\n",
+    "                              x_len=nx_source,\n",
+    "                              y_len=ny_source,\n",
     "                              base_name=\"initial_tof\",\n",
     "                              output_dir=os.path.join(output_dir,\n",
     "                                                      \"tiffs_tof_initial\"),\n",
     "                              tof_values=tof_values)\n",
     "    imaging.export_tiff_stack(dataset=normalized,\n",
     "                              key=\"sample_elastic\",\n",
-    "                              x_len=324,\n",
-    "                              y_len=324,\n",
+    "                              x_len=nx_source,\n",
+    "                              y_len=ny_source,\n",
     "                              base_name=\"elastic_tof\",\n",
     "                              output_dir=os.path.join(output_dir,\n",
     "                                                      \"tiffs_tof_elastic\"),\n",
@@ -597,13 +622,12 @@
    "metadata": {
     "pycharm": {
      "name": "#%% \n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
-    "# Load in IDF for positions of source/sample...etc\n",
-    "sc.compat.mantid.load_component_info(normalized, instrument_file)\n",
+    "# Attach instrument geometry\n",
+    "normalized = sc.merge(normalized, geometry)\n",
     "wavelength = sc.neutron.convert(normalized, \"tof\", \"wavelength\")"
    ]
   },
@@ -624,8 +648,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": false
+    }
    },
    "outputs": [],
    "source": [
@@ -663,8 +686,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -683,7 +705,7 @@
     "                                                 bin_width.value))\n",
     "rebinned_wavelength = sc.rebin(wavelength, \"wavelength\", wavelength_coords)\n",
     "\n",
-    "group_size = (324.0 / nx_target) * (324.0 / ny_target)\n",
+    "group_size = (float(nx_source) / nx_target) * (float(ny_source) / ny_target)\n",
     "factor = group_size\n",
     "rebinned_wavelength[\"sample\"] *= factor"
    ]
@@ -707,8 +729,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -718,8 +739,12 @@
     "    data = da / variances\n",
     "    norm = sc.DataArray(data=sc.reciprocal(variances),\n",
     "                        masks=dict(da.masks.items()))\n",
-    "    data.masks['zero_error'] = sc.equal(variances, 0.0 * variances.unit)\n",
-    "    norm.masks['zero_error'] = sc.equal(variances, 0.0 * variances.unit)\n",
+    "    data.masks['zero_error'] = sc.equal(variances,\n",
+    "                                        (0.0 * variances.unit).astype(\n",
+    "                                            scipp_dtype(float_type)))\n",
+    "    norm.masks['zero_error'] = sc.equal(variances,\n",
+    "                                        (0.0 * variances.unit).astype(\n",
+    "                                            scipp_dtype(float_type)))\n",
     "    return sc.sum(data, dim) / sc.sum(norm, dim)\n",
     "\n",
     "\n",
@@ -749,8 +774,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -781,8 +805,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -791,8 +814,7 @@
     "\n",
     "# Average out detector positions\n",
     "positions_dataset = sc.Dataset()\n",
-    "positions_dataset[\"position\"] = sc.Variable(\n",
-    "    rebinned_wavelength.coords[\"position\"])\n",
+    "positions_dataset[\"position\"] = rebinned_wavelength.coords[\"position\"].copy()\n",
     "positions_dataset.coords[\"spectrum_mapping\"] = rebinned_wavelength.coords[\n",
     "    \"spectrum_mapping\"]\n",
     "grouped_positions = sc.groupby(positions_dataset,\n",
@@ -832,8 +854,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": true
+    }
    },
    "outputs": [],
    "source": [
@@ -888,8 +909,7 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": false
+    }
    },
    "outputs": [],
    "source": [
@@ -969,9 +989,8 @@
     "                lattice_strain = d_sample_elastic - d_sample\n",
     "\n",
     "                # define successful fitting\n",
-    "                success = (params_s.coords[\"status\"].value\n",
-    "                           == \"success\") and (params_e.coords[\"status\"].value\n",
-    "                                              == \"success\")\n",
+    "                success = (params_s.coords[\"status\"].value == \"success\") and (\n",
+    "                    params_e.coords[\"status\"].value == \"success\")\n",
     "\n",
     "                # fitted values STORED in list\n",
     "                fit_list[edge_index].append(\n",
@@ -1028,13 +1047,15 @@
    "metadata": {
     "pycharm": {
      "name": "#%%\n"
-    },
-    "scrolled": false
+    }
    },
    "outputs": [],
    "source": [
     "# exclude-from-export\n",
     "import matplotlib.pyplot as plt\n",
+    "import matplotlib.colors as colors\n",
+    "for i in plt.get_fignums():\n",
+    "    plt.close(i)\n",
     "\n",
     "\n",
     "def tileplot_colorcode(fit_list,\n",
@@ -1063,16 +1084,12 @@
     "                        outlier_threshold[1]):\n",
     "                    strains[row, col] = fit_be_list[plots_counter][-2].value\n",
     "                plots_counter += 1\n",
-    "        import matplotlib.colors as colors\n",
     "        im = ax.imshow(strains,\n",
     "                       origin=\"upper\",\n",
-    "                       norm=colors.SymLogNorm(linthresh=1.0e-3),\n",
+    "                       norm=colors.SymLogNorm(linthresh=5.0e-3, vmin=-5.0e-3, vmax=5.0e-3, base=np.e),\n",
     "                       cmap=\"RdBu\")\n",
     "        cb = plt.colorbar(im)\n",
     "        cb.set_label(\"${}$ Lattice strain $\\\\varepsilon$\".format(bragg_edge))\n",
-    "        print(f'Saving {output_filename}.pdf and .png.')\n",
-    "        fig.savefig(\"{}.pdf\".format(output_filename), bbox_inches=\"tight\")\n",
-    "        fig.savefig(\"{}.png\".format(output_filename), bbox_inches=\"tight\")\n",
     "        output_filename_list.append(output_filename)\n",
     "    return output_filename_list\n",
     "\n",
@@ -1083,7 +1100,6 @@
     "output_filename_tileplot_color = '{:03d}_tileplot_color_{}xy_{}usbin_{}thresh_{:.3f}-{:.3f}plotthresh_initintegr'.format(\n",
     "    measurement_number, grouping_number, bin_width, masking_threshold,\n",
     "    outlier_threshold_color_plot[0], outlier_threshold_color_plot[1])\n",
-    "\n",
     "fignames_col = tileplot_colorcode(\n",
     "    fit_list=fit_list,\n",
     "    nx_target=nx_target,\n",
@@ -1092,232 +1108,6 @@
     "    output_filename_stem=os.path.join(output_dir,\n",
     "                                      output_filename_tileplot_color))"
    ]
-  },
-  {
-   "cell_type": "markdown",
-   "metadata": {
-    "pycharm": {
-     "name": "#%% md\n"
-    }
-   },
-   "source": [
-    "## Generate tile plots for single fig."
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {
-    "pycharm": {
-     "name": "#%%\n"
-    },
-    "scrolled": true
-   },
-   "outputs": [],
-   "source": [
-    "# exclude-from-export\n",
-    "def edges_to_centers(x):\n",
-    "    \"\"\"\n",
-    "    Convert array edges to centers\n",
-    "    \"\"\"\n",
-    "    return 0.5 * (x[1:] + x[:-1])\n",
-    "\n",
-    "\n",
-    "def tileplot(x_min_plot,\n",
-    "             x_max_plot,\n",
-    "             y_min_plot,\n",
-    "             y_max_plot,\n",
-    "             x_size,\n",
-    "             y_size,\n",
-    "             histogram_matrices,\n",
-    "             fitted_data,\n",
-    "             plots,\n",
-    "             fit_list,\n",
-    "             output_filename='tileplot_curves'):\n",
-    "\n",
-    "    fig, ax = plt.subplots(x_size, y_size, figsize=(12, 12))\n",
-    "\n",
-    "    labels = [\"Without load\", \"Elastic deformation\"]\n",
-    "    markers = [\"o\", \"s\"]\n",
-    "    # Plot some fake data so that we can have larger markers in the legend\n",
-    "    ax[0][0].plot([0, 1], [0, 1],\n",
-    "                  ls=\"None\",\n",
-    "                  marker=markers[0],\n",
-    "                  markersize=4,\n",
-    "                  label=labels[0],\n",
-    "                  color=\"C0\")\n",
-    "    ax[0][0].plot([0, 1], [0, 1],\n",
-    "                  ls=\"None\",\n",
-    "                  marker=markers[1],\n",
-    "                  markersize=4,\n",
-    "                  label=labels[1],\n",
-    "                  color=\"C1\")\n",
-    "\n",
-    "    # All bins are identical in a dataset\n",
-    "    x0_nostrain = edges_to_centers(\n",
-    "        histogram_matrices[0].coords[\"wavelength\"].values)\n",
-    "\n",
-    "    # x and y values of inital state, samples without strain\n",
-    "    y0_nostrain = histogram_matrices[0].values\n",
-    "\n",
-    "    plots_counter = 0\n",
-    "    for row in range(y_size):\n",
-    "        for col in range(x_size):\n",
-    "            # for running workspace index\n",
-    "            ws_index = plots[plots_counter][0]\n",
-    "\n",
-    "            # if the whole inital-sample-state is just one spectrum, always plot that.\n",
-    "            # Plot no-strain curve, inital state of sample\n",
-    "            ax[row][col].plot(x0_nostrain,\n",
-    "                              y0_nostrain,\n",
-    "                              ls=\"None\",\n",
-    "                              marker=\"o\",\n",
-    "                              markersize=1)\n",
-    "\n",
-    "            # Plot curves of other states given in histogram_matrices\n",
-    "            for k in range(len(histogram_matrices)):\n",
-    "                x0 = edges_to_centers(\n",
-    "                    histogram_matrices[1].coords[\"wavelength\"].values)\n",
-    "                y0 = histogram_matrices[1][\"spectrum_mapping\",\n",
-    "                                           int(ws_index)].values\n",
-    "                ax[row][col].plot(x0,\n",
-    "                                  y0,\n",
-    "                                  ls=\"None\",\n",
-    "                                  marker=markers[k],\n",
-    "                                  markersize=1)\n",
-    "\n",
-    "            # plotting the fitted spectra:\n",
-    "            x1 = edges_to_centers(fitted_data[0][plots_counter][0])\n",
-    "            x2 = edges_to_centers(fitted_data[1][plots_counter][0])\n",
-    "            ax[row][col].plot(x1,\n",
-    "                              fitted_data[0][plots_counter][1],\n",
-    "                              label=\"{} fit\".format(labels[0]),\n",
-    "                              lw=1,\n",
-    "                              zorder=3)\n",
-    "            ax[row][col].plot(x2,\n",
-    "                              fitted_data[1][plots_counter][1],\n",
-    "                              label=\"{} fit\".format(labels[1]),\n",
-    "                              lw=1,\n",
-    "                              zorder=3)\n",
-    "\n",
-    "            # Set axis limits\n",
-    "            ax[row][col].set_xlim([x_min_plot, x_max_plot])\n",
-    "            ax[row][col].set_ylim([y_min_plot, y_max_plot])\n",
-    "            if col == x_size - 1:\n",
-    "                ax[row][col].yaxis.tick_right()\n",
-    "            else:\n",
-    "                ax[row][col].set_yticklabels([])\n",
-    "            if row == 0:\n",
-    "                ax[row][col].xaxis.tick_top()\n",
-    "            else:\n",
-    "                ax[row][col].set_xticklabels([])\n",
-    "            ax[row][col].tick_params(axis=\"x\",\n",
-    "                                     direction=\"in\",\n",
-    "                                     bottom=True,\n",
-    "                                     top=True)\n",
-    "            ax[row][col].tick_params(axis=\"y\",\n",
-    "                                     direction=\"in\",\n",
-    "                                     left=True,\n",
-    "                                     right=True)\n",
-    "\n",
-    "            if row == y_size - 1:\n",
-    "                ax[row][col].text(0.0,\n",
-    "                                  -0.1,\n",
-    "                                  \"{:.1f}\".format(0.1 * col),\n",
-    "                                  ha='center',\n",
-    "                                  va='top',\n",
-    "                                  transform=ax[row][col].transAxes)\n",
-    "            if col == 0:\n",
-    "                ax[row][col].text(-0.1,\n",
-    "                                  0.0,\n",
-    "                                  \"{:.1f}\".format(0.1 * (y_size - row - 1)),\n",
-    "                                  ha='right',\n",
-    "                                  va='center',\n",
-    "                                  transform=ax[row][col].transAxes)\n",
-    "\n",
-    "            if fit_list[plots_counter][\n",
-    "                    -1]:  # usual sign for lattice strain is \\\\varepsilon\n",
-    "                ax[row][col].text(0.1,\n",
-    "                                  0.8,\n",
-    "                                  \"${:.3f}$\".format(\n",
-    "                                      fit_list[plots_counter][-2].value),\n",
-    "                                  ha='left',\n",
-    "                                  va='top',\n",
-    "                                  transform=ax[row][col].transAxes,\n",
-    "                                  fontsize=4)\n",
-    "            plots_counter += 1\n",
-    "\n",
-    "    # Last bin edge for xy coordinates\n",
-    "    ax[-1][-1].text(1.0,\n",
-    "                    -0.1,\n",
-    "                    \"{:.1f}\".format(0.1 * x_size),\n",
-    "                    ha='center',\n",
-    "                    va='top',\n",
-    "                    transform=ax[-1][-1].transAxes)\n",
-    "    ax[0][0].text(-0.1,\n",
-    "                  1.0,\n",
-    "                  \"{:.1f}\".format(0.1 * y_size),\n",
-    "                  ha='right',\n",
-    "                  va='center',\n",
-    "                  transform=ax[0][0].transAxes)\n",
-    "    # Display only one legend\n",
-    "    ax[0][0].legend(loc=(0, 1.8), ncol=4)\n",
-    "    fig.text(0.5, 0.905, \"Wavelength $[\\mathrm{\\AA}]$\")\n",
-    "    fig.text(0.94, 0.5, \"Counts\", rotation=90, ha='center', va='center')\n",
-    "    fig.text(0.5, 0.075, \"X position [m]\")\n",
-    "    fig.text(0.09,\n",
-    "             0.5,\n",
-    "             \"Y position [m]\",\n",
-    "             rotation=90,\n",
-    "             ha='center',\n",
-    "             va='center')\n",
-    "    # Remove white space between subplots\n",
-    "    fig.subplots_adjust(wspace=0.0, hspace=0.0)\n",
-    "    print(('Saving {}.pdf.').format(output_filename))\n",
-    "    fig.savefig(\"{}.pdf\".format(output_filename), bbox_inches=\"tight\")\n",
-    "    fig.savefig(\"{}.png\".format(output_filename), bbox_inches=\"tight\")\n",
-    "    return output_filename\n",
-    "\n",
-    "output_filename_tileplot = '{:03d}_tileplot_curves_{}xy_{}usbin_{}thresh_initintegr'\\\n",
-    "    .format(measurement_number,grouping_number,bin_width,\n",
-    "            masking_threshold)\n",
-    "\n",
-    "# Plotting: y_min_plot=200,y_max_plot=270 for 18x18, y_min_plot=90,y_max_plot=120 for 27x27.\n",
-    "plotting_win = [(i * (1 - .135), i * (1 + .135))\n",
-    "                for i in Bragg_edges_FCC.values]\n",
-    "for i in range(Bragg_edges_FCC.values.shape[0]):\n",
-    "    angstrom_val = Bragg_edges_FCC[\"bragg-edge\", i].value / 2.\n",
-    "    lattice_indicies = Bragg_edges_FCC.coords[\"miller-indices\"][\"bragg-edge\",\n",
-    "                                                                i].value\n",
-    "    output_filename_tileplot_new = '{}_{:.3f}A_({})'.format(\n",
-    "        output_filename_tileplot, angstrom_val, lattice_indicies)\n",
-    "\n",
-    "    win = plotting_win[i]\n",
-    "    fignames_curve = tileplot(\n",
-    "        x_min_plot=win[0],\n",
-    "        x_max_plot=win[1],\n",
-    "        y_min_plot=65610. / (nx_target * ny_target),\n",
-    "        y_max_plot=87480. / (nx_target * ny_target),  # remove 0.9 later\n",
-    "        x_size=nx_target,\n",
-    "        y_size=ny_target,\n",
-    "        histogram_matrices=histogram_matrices,\n",
-    "        fitted_data=[\n",
-    "            spectrum_list_fitted_sample[i],\n",
-    "            spectrum_list_fitted_sample_elastic[i]\n",
-    "        ],\n",
-    "        plots=plots,\n",
-    "        fit_list=fit_list[i],\n",
-    "        output_filename=os.path.join(output_dir, output_filename_tileplot_new))"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {
-    "scrolled": true
-   },
-   "outputs": [],
-   "source": []
   }
  ],
  "metadata": {
